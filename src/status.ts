@@ -84,7 +84,7 @@ export class StatusBar implements vscode.Disposable {
   private _visible: boolean = true;
 
   private _reloadStatusButton() {
-    this._cmakeToolsStatusItem.text = `CMake: ${this._projectName}: ${this._buildTypeLabel}: ${this._statusMessage}`;
+    this._cmakeToolsStatusItem.text = `${this._projectName}: ${this._buildTypeLabel}: ${this._statusMessage}`;
     this.reloadVisibility();
   }
 

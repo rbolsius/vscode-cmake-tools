@@ -153,7 +153,7 @@ export class CMakeOutputConsumer implements OutputConsumer {
         const vsdiag = new vscode.Diagnostic(new vscode.Range(lineno, 0, lineno, 9999), '', diagmap[level]);
         vsdiag.source = `CMake (${command})`;
         const filepath
-            = path.isAbsolute(filename) ? filename : util.normalizePath(path.join(this.sourceDir, filename), false);
+            = util.trueCasePathSync(path.isAbsolute(filename) ? filename : path.join(this.sourceDir, filename));
         this._errorState.diag = {
           filepath,
           diag: vsdiag,
@@ -233,7 +233,7 @@ export class CompileOutputConsumer implements OutputConsumer {
   private readonly _gcc_re = /^(.*):(\d+):(\d+):\s+(?:fatal )?(\w*)(?:\sfatale)?\s?:\s+(.*)/;
   private readonly _gnu_ld_re = /^(.*):(\d+)\s?:\s+(.*[^\]])$/;
   private readonly _msvc_re
-      = /^\s*(?!\d+>)?\s*([^\s>].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\):\s+((?:fatal )?error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.*)$/;
+      = /^\s*([^>]*)?\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\):\s+((?:fatal )?error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.*)$/;
 
   private readonly _ghsDiagnostics: RawDiagnostic[] = [];
   get ghsDiagnostics() { return this._ghsDiagnostics; }
@@ -307,7 +307,7 @@ export class CompileOutputConsumer implements OutputConsumer {
     };
   }
 
-  error(line: string) {
+  error(line: string): string {
     {
       // Try to parse for GCC
       const gcc_mat = this._gcc_re.exec(line);
@@ -323,7 +323,7 @@ export class CompileOutputConsumer implements OutputConsumer {
             severity,
             message,
           });
-          return;
+          return line;
         }
       }
     }
@@ -341,7 +341,7 @@ export class CompileOutputConsumer implements OutputConsumer {
             severity,
             message
           });
-          return;
+          return line;
         }
       }
     }
@@ -356,17 +356,20 @@ export class CompileOutputConsumer implements OutputConsumer {
     {
       const msvc_diag = this._tryParseMSVC(line);
       if (msvc_diag) {
+        line = line.replace(msvc_diag.file, util.trueCasePathSync(msvc_diag.file));
         this._msvcDiagnostics.push(msvc_diag);
       }
     }
+
+    return line;
   }
 
-  output(line: string) { this.error(line); }
+  output(line: string): string { return this.error(line); }
 
   createDiagnostics(build_dir: string): FileDiagnostic[] {
     const diags_by_file = new Map<string, vscode.Diagnostic[]>();
 
-    const make_abs = (p: string) => util.normalizePath(path.isAbsolute(p) ? p : path.join(build_dir, p), false);
+    const make_abs = (p: string) => util.trueCasePathSync(path.isAbsolute(p) ? p : path.join(build_dir, p));
     const severity_of = (p: string) => {
       switch (p) {
       case 'warning':
@@ -431,12 +434,12 @@ export class CMakeBuildConsumer implements OutputConsumer, vscode.Disposable {
   dispose() { this._onProgressEmitter.dispose(); }
 
   error(line: string) {
-    this.compileConsumer.error(line);
+    line = this.compileConsumer.error(line);
     build_logger.error(line);
   }
 
   output(line: string) {
-    this.compileConsumer.output(line);
+    line = this.compileConsumer.output(line);
     build_logger.info(line);
     const progress = this._percent_re.exec(line);
     if (progress) {
